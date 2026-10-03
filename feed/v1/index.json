@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "provider": "opc",
+  "version": 1790993554,
+  "generatedAt": "2026-10-03T02:12:34Z",
+  "expires": "2026-11-02T02:12:34Z",
+  "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
+  "entries": [
+    {
+      "pluginId": "akitaonrails.ai-usagebar",
+      "repo": "https://github.com/akitaonrails/ai-usagebar",
+      "commit": "b1766cb92ebd9c98776bf1777ccfb9dc30c7b789",
+      "timeReviewed": "2026-10-02T10:55:12Z",
+      "verdict": "caution",
+      "path": "statements/akitaonrails.ai-usagebar/b1766cb92ebd9c98776bf1777ccfb9dc30c7b789.json",
+      "sha256": "2944d74eccc3dc38e2caa96d83692f7a1b6aac56f8288a6ff29889bc412dd0be",
+      "tree": "619530c40addbf8f633fb91422f5017bf309677d"
+    },
+    {
+      "pluginId": "io.github.letsfg.flights",
+      "repo": "https://github.com/LetsFG/LetsFG",
+      "commit": "26b1fa823756f164b472c7eab0d22f102044dc35",
+      "timeReviewed": "2026-10-02T10:51:03Z",
+      "verdict": "caution",
+      "path": "statements/io.github.letsfg.flights/26b1fa823756f164b472c7eab0d22f102044dc35.json",
+      "sha256": "ee6d16143ece2b09980369a86da9e811d9a52f67a0e79dbd26af74e047a9b128",
+      "tree": "f84060a635365d4825d50589adb0fbe12b31859a"
+    },
+    {
+      "pluginId": "omamail",
+      "repo": "https://github.com/huacnlee/omamail",
+      "commit": "3d0d673715cb0fb4f49cb718c2a2dbc002ee8763",
+      "timeReviewed": "2026-10-02T10:59:51Z",
+      "verdict": "caution",
+      "path": "statements/omamail/3d0d673715cb0fb4f49cb718c2a2dbc002ee8763.json",
+      "sha256": "0fa8ea591125727cb8ee8406c3bd704df27c3b59ecd850c97e121b343285ffcc",
+      "tree": "c3802736d515a6e9e3d7bf83503322c3101d4e7b"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# Runtime dependencies of the pinned public tool (spec, aggregator, collector at OPC_TOOL_COMMIT)
+# plus its build backend; the packages themselves install with --no-deps --no-build-isolation.
+# Regenerate: uv pip compile ci/requirements.in --python-version 3.12 \
+#   --python-platform x86_64-unknown-linux-gnu --generate-hashes -o ci/requirements.lock
+jsonschema>=4.18
+referencing>=0.30
+sigstore==4.5.0
+hatchling>=1.25

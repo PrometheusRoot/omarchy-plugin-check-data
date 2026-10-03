@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>omarchy-plugin-check data</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fafafa; --mute: #5c5c66; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e8ea; --bg: #141416; --mute: #a0a0aa; } }
+  body { margin: 0 auto; max-width: 46rem; padding: 2rem 1rem; font: 16px/1.55 ui-monospace, monospace; color: var(--fg); background: var(--bg); }
+  a { color: inherit; } p, li { color: var(--fg); } small { color: var(--mute); }
+  pre { overflow-x: auto; padding: .75rem; border: 1px solid var(--mute); }
+</style>
+</head>
+<body>
+<h1>omarchy-plugin-check data</h1>
+<p>The signed store snapshot of <a href="https://github.com/PrometheusRoot/omarchy-plugin-check">omarchy-plugin-check</a>:
+commit-bound safety verdicts for Omarchy plugins. Published daily; each snapshot is valid for 7 days.
+Human-readable reports: <a href="https://prometheusroot.github.io/omarchy-plugin-check/">the site</a>.</p>
+<ul>
+  <li><a href="store.json">store.json</a> + <a href="store.json.sig">.sig</a> (the CLI's contract)</li>
+  <li><a href="store-manifest.json">store-manifest.json</a> + <a href="store-manifest.json.sig">.sig</a> (store client bundle)</li>
+  <li><a href="providers.json">providers.json</a> + <a href="providers.json.sig">.sig</a> (provider registry)</li>
+  <li><a href="api/v1/meta.json">api/v1/</a> (static API) · <a href="keys/allowed_signers">keys/allowed_signers</a></li>
+</ul>
+<p>Verify (the key is also committed in the tool's <code>spec/keys/allowed_signers</code>):</p>
+<pre>ssh-keygen -Y verify -f allowed_signers -I omarchy-plugin-check \
+  -n omarchy-plugin-check-snapshot -s store.json.sig &lt; store.json</pre>
+<p><small>Data: CC BY 4.0. Source, feed and every published version:
+<a href="https://github.com/PrometheusRoot/omarchy-plugin-check-data">omarchy-plugin-check-data</a>.
+Not affiliated with Omarchy.</small></p>
+</body>
+</html>

@@ -1,0 +1,295 @@
+name: publish
+
+# Build, sign and publish the store snapshot (ADR-0039 in PrometheusRoot/omarchy-plugin-check).
+#   registry: stamp providers.json (version, 30-day expiry) and sign it      [production key]
+#   build:    collector + aggregator of the public tool at a pinned commit; every feed verified
+#             with Sigstore against the registry identities; nothing signed  [no secrets]
+#   sign:     sign store.json + store-manifest.json, then verify everything
+#             with spec/keys/allowed_signers                                 [production key]
+#   deploy:   GitHub Pages (per-file: what `omarchy-plugin-check update` fetches)
+#   release:  immutable release snapshot-<version> with snapshot.tar.gz (what the site builds from)
+# The key only ever exists as a 0600 file in RUNNER_TEMP for one ssh-keygen step, shredded after.
+
+on:
+  schedule:
+    - cron: "17 4 * * *" # daily; a snapshot is valid for 7 days
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  OPC_TOOL_REPO: PrometheusRoot/omarchy-plugin-check
+  OPC_TOOL_COMMIT: 47f0aeef2a4c08344e0ec34248232a180c0c7016 # master after PR #2 (ADR-0039)
+
+jobs:
+  registry:
+    name: Sign the registry
+    if: github.repository == 'PrometheusRoot/omarchy-plugin-check-data' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: data
+          persist-credentials: false
+          sparse-checkout: providers.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.OPC_TOOL_REPO }}
+          ref: ${{ env.OPC_TOOL_COMMIT }}
+          path: tool
+          persist-credentials: false
+          sparse-checkout: spec/keys
+          sparse-checkout-cone-mode: false
+
+      - name: Stamp the registry
+        run: |
+          mkdir -p "$RUNNER_TEMP/registry"
+          now=$(date -u +%s)
+          jq --argjson v "$now" --arg g "$(date -u -d "@$now" +%FT%TZ)" \
+            --arg e "$(date -u -d "@$((now + 30 * 86400))" +%FT%TZ)" \
+            'del(.dev) | .version = $v | .generatedAt = $g | .expires = $e' \
+            data/providers.json > "$RUNNER_TEMP/registry/providers.json"
+
+      - name: Sign the registry (production key)
+        env:
+          OPC_SNAPSHOT_KEY: ${{ secrets.OPC_SNAPSHOT_KEY }}
+        run: |
+          key_dir=$(mktemp -d -p "$RUNNER_TEMP") && chmod 700 "$key_dir" && key="$key_dir/key"
+          trap 'shred -u "$key" 2> /dev/null || rm -f "$key"; rmdir "$key_dir"' EXIT
+          (umask 077 && printf '%s\n' "$OPC_SNAPSHOT_KEY" > "$key")
+          ssh-keygen -Y sign -q -f "$key" -n omarchy-plugin-check-providers "$RUNNER_TEMP/registry/providers.json"
+
+      - name: Verify with the published allowed_signers
+        run: |
+          ssh-keygen -Y verify -f tool/spec/keys/allowed_signers -I omarchy-plugin-check \
+            -n omarchy-plugin-check-providers -s "$RUNNER_TEMP/registry/providers.json.sig" \
+            < "$RUNNER_TEMP/registry/providers.json"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: registry
+          path: ${{ runner.temp }}/registry
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    name: Collect and aggregate (no secrets)
+    needs: registry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: data
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.OPC_TOOL_REPO }}
+          ref: ${{ env.OPC_TOOL_COMMIT }}
+          path: tool
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the public tool (hash-pinned dependencies)
+        run: data/ci/install-tool.sh tool
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: registry
+          path: ${{ runner.temp }}/out
+
+      # Collector cache (marketplace, per-repository GitHub data with star history) and the
+      # aggregator's anti-rollback state; restored from the latest run, saved under a new key.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/cache
+          key: publish-cache-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: publish-cache-v1-
+
+      - name: Collect (marketplace + GitHub, read-only GITHUB_TOKEN; resumes on rate limit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cache="$RUNNER_TEMP/cache/collector"
+          out="$RUNNER_TEMP/out"
+          gunzip -c data/ci/seed/catalog-2026-09-30.json.gz > "$RUNNER_TEMP/seed-catalog.json"
+          opc-collect --cache "$cache" sync
+          rc=0
+          opc-collect --cache "$cache" github --seed-catalog "$RUNNER_TEMP/seed-catalog.json" --max-wait 3700 || rc=$?
+          ((rc == 0 || rc == 3)) || exit "$rc" # 3 = stopped early (rate limit): the next run resumes
+          opc-collect --cache "$cache" stats --out "$out/stats.json"
+
+      - name: Aggregate (Sigstore-verified feeds) and rank; unsigned output
+        run: |
+          cache="$RUNNER_TEMP/cache"
+          out="$RUNNER_TEMP/out"
+          common=(--providers "$out/providers.json" --providers-sig "$out/providers.json.sig"
+            --allowed-signers tool/spec/keys/allowed_signers
+            --catalog "$cache/collector/marketplace/catalog.json"
+            --registry "$cache/collector/marketplace/registry.json"
+            --out "$out" --state "$cache/aggregator-state.json")
+          opc-aggregate build "${common[@]}" > /dev/null
+          opc-collect --cache "$cache/collector" rank --stats "$out/stats.json" \
+            --api-index "$out/api/v1/index.json" --out "$out/ranking.json"
+          opc-aggregate build "${common[@]}" --stats "$out/stats.json" --ranking "$out/ranking.json"
+          jq -e '.dev == false' "$out/store.json" > /dev/null
+          jq '{registry, providers: [.providers[] | {id, verification, rows, status}], rejected}' "$out/api/v1/meta.json"
+
+      - name: Package the unsigned snapshot
+        run: |
+          cd "$RUNNER_TEMP/out"
+          tar -czf "$RUNNER_TEMP/unsigned.tar.gz" store.json store-manifest.json store-home.json \
+            store-search.json store-details.json providers.json providers.json.sig api
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned
+          path: ${{ runner.temp }}/unsigned.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+          compression-level: 0
+
+  sign:
+    name: Sign and verify the snapshot
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: data
+          persist-credentials: false
+          sparse-checkout: pages
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.OPC_TOOL_REPO }}
+          ref: ${{ env.OPC_TOOL_COMMIT }}
+          path: tool
+          persist-credentials: false
+          sparse-checkout: |
+            spec/keys
+            spec/verify-snapshot.sh
+            store/bin/omarchy-plugin-store-verify
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned
+          path: ${{ runner.temp }}
+
+      - name: Unpack and check what is about to be signed
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          tar -xzf "$RUNNER_TEMP/unsigned.tar.gz" -C "$RUNNER_TEMP/site"
+          cd "$RUNNER_TEMP/site"
+          jq -e '.kind == "omarchy-plugin-check/store" and .dev == false' store.json > /dev/null
+          jq -e '.kind == "omarchy-plugin-check/store-manifest" and .dev == false' store-manifest.json > /dev/null
+
+      - name: Sign store.json and store-manifest.json (production key)
+        env:
+          OPC_SNAPSHOT_KEY: ${{ secrets.OPC_SNAPSHOT_KEY }}
+        run: |
+          key_dir=$(mktemp -d -p "$RUNNER_TEMP") && chmod 700 "$key_dir" && key="$key_dir/key"
+          trap 'shred -u "$key" 2> /dev/null || rm -f "$key"; rmdir "$key_dir"' EXIT
+          (umask 077 && printf '%s\n' "$OPC_SNAPSHOT_KEY" > "$key")
+          for f in store.json store-manifest.json; do
+            ssh-keygen -Y sign -q -f "$key" -n omarchy-plugin-check-snapshot "$RUNNER_TEMP/site/$f"
+          done
+
+      - name: Verify like every client does (spec/keys/allowed_signers)
+        id: verify
+        run: |
+          site="$RUNNER_TEMP/site"
+          signers=tool/spec/keys/allowed_signers
+          tool/spec/verify-snapshot.sh "$site/store.json" "$site/store.json.sig" "$signers"
+          OPC_STORE_ALLOWED_SIGNERS="$signers" OPC_STORE_VERIFY_STATE="$RUNNER_TEMP/bundle-version" \
+            tool/store/bin/omarchy-plugin-store-verify bundle "$site"
+          ssh-keygen -Y verify -f "$signers" -I omarchy-plugin-check -n omarchy-plugin-check-providers \
+            -s "$site/providers.json.sig" < "$site/providers.json"
+          echo "version=$(jq -r .version "$site/store.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Lay out Pages and the release files
+        run: |
+          site="$RUNNER_TEMP/site"
+          rel="$RUNNER_TEMP/release"
+          mkdir -p "$site/keys" "$rel"
+          cp tool/spec/keys/allowed_signers "$site/keys/allowed_signers"
+          cp data/pages/index.html "$site/index.html"
+          (cd "$site" && tar -czf "$rel/snapshot.tar.gz" store.json store.json.sig store-manifest.json \
+            store-manifest.json.sig store-home.json store-search.json store-details.json \
+            providers.json providers.json.sig api)
+          cp "$site"/{store.json,store.json.sig,store-manifest.json,store-manifest.json.sig,providers.json,providers.json.sig} "$rel/"
+          (cd "$rel" && sha256sum -- * > SHA256SUMS)
+          du -sh "$site" "$rel/snapshot.tar.gz"
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to Pages
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write # deploy the Pages artifact
+      id-token: write # deploy-pages proves the run's identity to Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  release:
+    name: Immutable release
+    needs: [sign, deploy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the (immutable) release and its tag
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Create release snapshot-<version>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.sign.outputs.version }}
+        run: |
+          [[ $VERSION =~ ^[0-9]+$ ]]
+          cd "$RUNNER_TEMP/release"
+          gh release create "snapshot-$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Snapshot $VERSION" \
+            --notes "Signed store snapshot version $VERSION (production key, see keys/allowed_signers on Pages). Verify: README.md." \
+            -- *
