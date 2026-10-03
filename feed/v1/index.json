@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "provider": "opc",
-  "version": 1790993554,
-  "generatedAt": "2026-10-03T02:12:34Z",
-  "expires": "2026-11-02T02:12:34Z",
+  "version": 1791057986,
+  "generatedAt": "2026-10-03T20:06:26Z",
+  "expires": "2026-11-02T20:06:26Z",
   "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
   "entries": [
     {
@@ -12,8 +12,8 @@
       "commit": "b1766cb92ebd9c98776bf1777ccfb9dc30c7b789",
       "timeReviewed": "2026-10-02T10:55:12Z",
       "verdict": "caution",
-      "path": "statements/akitaonrails.ai-usagebar/b1766cb92ebd9c98776bf1777ccfb9dc30c7b789.json",
-      "sha256": "2944d74eccc3dc38e2caa96d83692f7a1b6aac56f8288a6ff29889bc412dd0be",
+      "path": "statements/akitaonrails.ai-usagebar/b1766cb92ebd9c98776bf1777ccfb9dc30c7b789.sigstore.json",
+      "sha256": "260208193e840032e7790209c995522fb2cf42517c0ffe74b0bbd2040ae1f450",
       "tree": "619530c40addbf8f633fb91422f5017bf309677d"
     },
     {
@@ -22,8 +22,8 @@
       "commit": "26b1fa823756f164b472c7eab0d22f102044dc35",
       "timeReviewed": "2026-10-02T10:51:03Z",
       "verdict": "caution",
-      "path": "statements/io.github.letsfg.flights/26b1fa823756f164b472c7eab0d22f102044dc35.json",
-      "sha256": "ee6d16143ece2b09980369a86da9e811d9a52f67a0e79dbd26af74e047a9b128",
+      "path": "statements/io.github.letsfg.flights/26b1fa823756f164b472c7eab0d22f102044dc35.sigstore.json",
+      "sha256": "e19dce21921c86ded44ed88da69722c2df106f78acf69e8d9c9b905edfbe3072",
       "tree": "f84060a635365d4825d50589adb0fbe12b31859a"
     },
     {
@@ -32,8 +32,8 @@
       "commit": "3d0d673715cb0fb4f49cb718c2a2dbc002ee8763",
       "timeReviewed": "2026-10-02T10:59:51Z",
       "verdict": "caution",
-      "path": "statements/omamail/3d0d673715cb0fb4f49cb718c2a2dbc002ee8763.json",
-      "sha256": "0fa8ea591125727cb8ee8406c3bd704df27c3b59ecd850c97e121b343285ffcc",
+      "path": "statements/omamail/3d0d673715cb0fb4f49cb718c2a2dbc002ee8763.sigstore.json",
+      "sha256": "b8e0d5226310ad24ea946c65a99ef9c2d09ad5b291cd41e96847dc1a425bd8aa",
       "tree": "c3802736d515a6e9e3d7bf83503322c3101d4e7b"
     }
   ]
