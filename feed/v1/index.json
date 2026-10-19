@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "provider": "opc",
-  "version": 1791803230,
-  "generatedAt": "2026-10-12T11:07:10Z",
-  "expires": "2026-11-11T11:07:10Z",
+  "version": 1792400860,
+  "generatedAt": "2026-10-19T09:07:40Z",
+  "expires": "2026-11-18T09:07:40Z",
   "predicateType": "https://prometheusroot.github.io/omarchy-plugin-check/attestation/security-review/v1",
   "entries": [
     {
